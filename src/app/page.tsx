@@ -127,16 +127,122 @@ export default function HomePage() {
   const compareRef = useScrollReveal();
   const vesselRef = useScrollReveal();
   const ctaRef = useScrollReveal();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Keep video paused; scroll strictly controls its timeline
+    video.pause();
+
+    let targetProgress = 0;
+    let rafId: number | null = null;
+
+    const seekVideo = () => {
+      if (!video || !video.duration || Number.isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) {
+        return;
+      }
+
+      const duration = video.duration;
+      // Clamp target time slightly before video duration to avoid ended/loop edge cases
+      const maxTime = Math.max(0, duration - 0.04);
+      const targetTime = Math.min(maxTime, Math.max(0, targetProgress * duration));
+
+      if (Math.abs(video.currentTime - targetTime) > 0.02) {
+        if (!video.seeking) {
+          video.currentTime = targetTime;
+        }
+      }
+    };
+
+    const handleSeeked = () => {
+      seekVideo();
+    };
+
+    const onScroll = () => {
+      const scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+      const ctaEl = ctaRef.current;
+      const winHeight = window.innerHeight || 1;
+      const docHeight = document.documentElement.scrollHeight || document.body.scrollHeight || 1;
+      const ctaTop = ctaEl ? ctaEl.offsetTop : docHeight - winHeight;
+
+      // Complete video progression to final black frame as user reaches the CTA section
+      const maxScroll = Math.max(1, ctaTop - winHeight * 0.2);
+      targetProgress = Math.min(1, Math.max(0, scrollY / maxScroll));
+
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          seekVideo();
+        });
+      }
+    };
+
+    const handleMetadata = () => {
+      video.pause();
+      // Ensure the decoder paints the first frame when loaded at the top
+      if (video.currentTime === 0) {
+        try {
+          video.currentTime = 0.001;
+        } catch (_) {}
+      }
+      onScroll();
+    };
+
+    video.addEventListener("seeked", handleSeeked);
+    video.addEventListener("loadedmetadata", handleMetadata);
+    video.addEventListener("canplay", handleMetadata);
+
+    if (video.readyState >= 1) {
+      handleMetadata();
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+
+    onScroll();
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      video.removeEventListener("seeked", handleSeeked);
+      video.removeEventListener("loadedmetadata", handleMetadata);
+      video.removeEventListener("canplay", handleMetadata);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [ctaRef]);
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
+    <div className="min-h-screen relative" style={{ background: "var(--color-bg)" }}>
+      {/* ── Fixed Background Video for Cinematic Scroll Scrubbing ── */}
+      <div
+        className="fixed inset-0 z-0 overflow-hidden pointer-events-none"
+        aria-hidden="true"
+      >
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          preload="auto"
+          className="w-full h-full object-cover object-center"
+          style={{ backgroundColor: "#000000" }}
+        >
+          <source src="/clean_bgvideo.mp4" type="video/mp4" />
+        </video>
+        {/* Strong dark overlay to preserve FreightIQ's deep black aesthetic and ensure readability */}
+        <div className="absolute inset-0 bg-black/80" />
+      </div>
+
       {/* ── Nav ── */}
       <TopNav />
 
       {/* ── Hero ── */}
       <section
         ref={heroRef}
-        className="relative min-h-screen flex items-center justify-center overflow-hidden pt-12"
+        className="relative z-10 min-h-screen flex items-center justify-center overflow-hidden pt-12"
       >
         {/* Background grid */}
         <div
@@ -209,7 +315,7 @@ export default function HomePage() {
       </section>
 
       {/* ── The Problem ── */}
-      <section ref={problemRef} className="py-24 px-6">
+      <section ref={problemRef} className="relative z-10 py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14 reveal">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-3" style={{ color: "var(--color-cyan)" }}>
@@ -251,7 +357,7 @@ export default function HomePage() {
       </section>
 
       {/* ── The Solution / How It Works ── */}
-      <section ref={solutionRef} className="py-24 px-6" style={{ background: "var(--color-bg-raised)" }}>
+      <section ref={solutionRef} className="relative z-10 py-24 px-6" style={{ background: "rgba(13, 13, 13, 0.75)" }}>
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14 reveal">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-3" style={{ color: "var(--color-cyan)" }}>
@@ -306,7 +412,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Key Capabilities ── */}
-      <section ref={capsRef} className="py-24 px-6">
+      <section ref={capsRef} className="relative z-10 py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14 reveal">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-3" style={{ color: "var(--color-cyan)" }}>
@@ -347,7 +453,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Before / After ── */}
-      <section ref={compareRef} className="py-24 px-6" style={{ background: "var(--color-bg-raised)" }}>
+      <section ref={compareRef} className="relative z-10 py-24 px-6" style={{ background: "rgba(13, 13, 13, 0.75)" }}>
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-14 reveal">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-3" style={{ color: "var(--color-cyan)" }}>
@@ -420,7 +526,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Vessel Classes ── */}
-      <section ref={vesselRef} className="py-24 px-6">
+      <section ref={vesselRef} className="relative z-10 py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14 reveal">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-3" style={{ color: "var(--color-cyan)" }}>
@@ -465,7 +571,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Final CTA ── */}
-      <section ref={ctaRef} className="py-24 px-6 relative overflow-hidden">
+      <section ref={ctaRef} className="relative z-10 py-24 px-6 overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
@@ -497,8 +603,8 @@ export default function HomePage() {
 
       {/* ── Footer ── */}
       <footer
-        className="py-6 px-6 border-t text-center"
-        style={{ borderColor: "var(--color-border)" }}
+        className="relative z-10 py-6 px-6 border-t text-center"
+        style={{ borderColor: "var(--color-border)", background: "var(--color-bg)" }}
       >
         <p className="text-[11px] font-mono" style={{ color: "var(--color-text-dim)" }}>
           FreightIQ v1.2 — Phase 12 &middot; SIH 2025 Maritime Intelligence Platform
